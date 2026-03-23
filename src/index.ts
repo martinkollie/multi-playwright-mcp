@@ -101,13 +101,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   const transport = new StdioServerTransport();
+  let shuttingDown = false;
+
+  const shutdown = async (reason: string, exitCode: number = 0): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.error(`multi-playwright-mcp shutting down (${reason})`);
+    await closeAllSessions();
+    await server.close();
+    process.exit(exitCode);
+  };
+
+  const shutdownFrom = (reason: string, exitCode: number = 0): void => {
+    void shutdown(reason, exitCode).catch((error) => {
+      console.error(`Shutdown error (${reason}):`, error);
+      process.exit(1);
+    });
+  };
+
+  transport.onclose = () => {
+    shutdownFrom('transport closed');
+  };
+
+  transport.onerror = (error) => {
+    console.error('Transport error:', error);
+    shutdownFrom('transport error', 1);
+  };
+
+  process.once('SIGINT', () => {
+    shutdownFrom('SIGINT');
+  });
+
+  process.once('SIGTERM', () => {
+    shutdownFrom('SIGTERM');
+  });
+
+  process.once('disconnect', () => {
+    shutdownFrom('disconnect');
+  });
+
+  process.stdin.once('end', () => {
+    shutdownFrom('stdin ended');
+  });
+
+  process.stdin.once('close', () => {
+    shutdownFrom('stdin closed');
+  });
+
   await server.connect(transport);
   console.error('multi-playwright-mcp running on stdio');
-
-  process.on('SIGINT', async () => {
-    await closeAllSessions();
-    process.exit(0);
-  });
 }
 
 main().catch((error) => {
