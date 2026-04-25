@@ -15,7 +15,7 @@ const CONNECTION_CONFIG = {
   browser: {
     browserName: 'chromium' as const,
     isolated: true,
-    launchOptions: { headless: false },
+    launchOptions: { headless: false, channel: 'chromium' },
   },
 };
 

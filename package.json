@@ -1,6 +1,6 @@
 {
   "name": "multi-playwright-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-session wrapper around @playwright/mcp — run multiple isolated browsers via a single MCP server",
   "main": "dist/index.js",
   "bin": "dist/index.js",
