@@ -11,19 +11,27 @@ export interface SessionEntry {
 
 const sessions = new Map<string, SessionEntry>();
 
-const CONNECTION_CONFIG = {
-  browser: {
-    browserName: 'chromium' as const,
-    isolated: true,
-    launchOptions: { headless: false, channel: 'chromium' },
-  },
-};
+function isHeadless(): boolean {
+  const env = process.env.PLAYWRIGHT_HEADLESS;
+  if (env !== undefined) return env !== '0' && env.toLowerCase() !== 'false';
+  return !process.env.DISPLAY;
+}
+
+function getConnectionConfig() {
+  return {
+    browser: {
+      browserName: 'chromium' as const,
+      isolated: true,
+      launchOptions: { headless: isHeadless(), channel: 'chromium' },
+    },
+  };
+}
 
 export async function getOrCreateClient(sessionId: string): Promise<Client> {
   const existing = sessions.get(sessionId);
   if (existing) return existing.client;
 
-  const server = await createConnection(CONNECTION_CONFIG);
+  const server = await createConnection(getConnectionConfig());
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 
   await server.connect(serverTransport);
@@ -37,7 +45,7 @@ export async function getOrCreateClient(sessionId: string): Promise<Client> {
 
 /** Discover available tools from a temporary inner connection. */
 export async function discoverTools(): Promise<Tool[]> {
-  const server = await createConnection(CONNECTION_CONFIG);
+  const server = await createConnection(getConnectionConfig());
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
 
