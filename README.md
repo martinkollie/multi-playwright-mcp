@@ -29,6 +29,31 @@ Add to your MCP client config (e.g. Copilot CLI, Claude Desktop, VS Code):
 }
 ```
 
+## Persistent Sessions
+
+By default, each session uses an ephemeral browser profile that is discarded when the session closes. To persist login state, cookies, and localStorage across sessions, set the `PLAYWRIGHT_USER_DATA_DIR` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "node",
+      "args": ["/path/to/multi-playwright-mcp/dist/index.js"],
+      "env": {
+        "PLAYWRIGHT_USER_DATA_DIR": "/home/user/.playwright-sessions"
+      }
+    }
+  }
+}
+```
+
+Each `sessionId` gets its own subdirectory under that path (e.g. `/home/user/.playwright-sessions/session-a/`). When you close and reopen a session with the same ID, the browser profile is reused — logins survive across restarts.
+
+| Mode | `PLAYWRIGHT_USER_DATA_DIR` | Behavior |
+|------|---------------------------|----------|
+| Ephemeral (default) | unset | Fresh browser per session, data lost on close |
+| Persistent | set to a directory | Profile saved per sessionId, survives restarts |
+
 ## Tools
 
 All tools from [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) are proxied with an added `sessionId` parameter. Each unique `sessionId` gets its own headless Chromium browser.
