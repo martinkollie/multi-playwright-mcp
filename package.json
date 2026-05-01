@@ -3,9 +3,12 @@
   "version": "1.0.1",
   "description": "Multi-session wrapper around @playwright/mcp — run multiple isolated browsers via a single MCP server",
   "main": "dist/index.js",
-  "bin": "dist/index.js",
+  "bin": {
+    "multi-playwright-mcp": "dist/index.js"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs');const f='dist/index.js';fs.writeFileSync(f,'#!/usr/bin/env node\\n'+fs.readFileSync(f));fs.chmodSync(f,0o755)\"",
+    "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsc --watch"
   },
@@ -13,11 +16,22 @@
     "mcp",
     "playwright",
     "browser",
-    "automation"
+    "automation",
+    "multi-session"
   ],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/martinkollie/multi-playwright-mcp.git"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@playwright/mcp": "^0.0.68"
