@@ -4,26 +4,70 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
+export interface SessionOptions {
+  videoDir?: string;
+  videoSize?: { width: number; height: number };
+}
+
 export interface SessionEntry {
   server: Server;
   client: Client;
+  options?: SessionOptions;
 }
 
 const sessions = new Map<string, SessionEntry>();
 
-const CONNECTION_CONFIG = {
-  browser: {
-    browserName: 'chromium' as const,
-    isolated: true,
-    launchOptions: { headless: false, channel: 'chromium' },
-  },
-};
+type ConnectionConfig = NonNullable<Parameters<typeof createConnection>[0]>;
+
+function buildConnectionConfig(options?: SessionOptions): ConnectionConfig {
+  const config: ConnectionConfig = {
+    browser: {
+      browserName: 'chromium',
+      isolated: true,
+      launchOptions: { headless: false, channel: 'chromium' },
+    },
+  };
+
+  if (options?.videoDir && options?.videoSize) {
+    config.saveVideo = {
+      width: options.videoSize.width,
+      height: options.videoSize.height,
+    };
+    config.outputDir = options.videoDir;
+  }
+
+  return config;
+}
+
+export async function createSession(
+  sessionId: string,
+  options?: SessionOptions
+): Promise<{ created: boolean; videoEnabled: boolean }> {
+  if (sessions.has(sessionId)) {
+    throw new Error(`Session "${sessionId}" already exists`);
+  }
+
+  const config = buildConnectionConfig(options);
+  const server = await createConnection(config);
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+
+  const client = new Client({ name: `session-${sessionId}`, version: '1.0.0' });
+  await client.connect(clientTransport);
+
+  sessions.set(sessionId, { server, client, options });
+  return {
+    created: true,
+    videoEnabled: !!(options?.videoDir && options?.videoSize),
+  };
+}
 
 export async function getOrCreateClient(sessionId: string): Promise<Client> {
   const existing = sessions.get(sessionId);
   if (existing) return existing.client;
 
-  const server = await createConnection(CONNECTION_CONFIG);
+  const config = buildConnectionConfig();
+  const server = await createConnection(config);
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
 
   await server.connect(serverTransport);
@@ -37,7 +81,8 @@ export async function getOrCreateClient(sessionId: string): Promise<Client> {
 
 /** Discover available tools from a temporary inner connection. */
 export async function discoverTools(): Promise<Tool[]> {
-  const server = await createConnection(CONNECTION_CONFIG);
+  const config = buildConnectionConfig();
+  const server = await createConnection(config);
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
 

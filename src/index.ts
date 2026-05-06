@@ -11,6 +11,8 @@ import {
   listSessions,
   closeSession,
   closeAllSessions,
+  createSession,
+  type SessionOptions,
 } from './session.js';
 
 const SESSION_ID_PARAM = {
@@ -59,6 +61,29 @@ const MANAGEMENT_TOOLS: Tool[] = [
       required: ['sessionId'],
     },
   },
+  {
+    name: 'create_session',
+    description: 'Create a browser session with optional video recording. Must be called before any browser tool if video is needed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: SESSION_ID_PARAM,
+        videoDir: {
+          type: 'string',
+          description: 'Directory path where video recording will be saved. Required to enable video.',
+        },
+        videoSize: {
+          type: 'object',
+          description: 'Video resolution. Required to enable video.',
+          properties: {
+            width: { type: 'number', description: 'Video width in pixels' },
+            height: { type: 'number', description: 'Video height in pixels' },
+          },
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
 ];
 
 const server = new Server(
@@ -87,6 +112,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     await closeSession(sessionId);
     return {
       content: [{ type: 'text', text: `Session "${sessionId}" closed` }],
+    };
+  }
+
+  if (name === 'create_session') {
+    const sessionId = (args as any)?.sessionId;
+    if (!sessionId) throw new Error('sessionId is required');
+
+    const options: SessionOptions = {};
+    if ((args as any)?.videoDir) options.videoDir = (args as any).videoDir;
+    if ((args as any)?.videoSize) options.videoSize = (args as any).videoSize;
+
+    const result = await createSession(sessionId, Object.keys(options).length > 0 ? options : undefined);
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          sessionId,
+          created: result.created,
+          videoEnabled: result.videoEnabled,
+          videoDir: options.videoDir ?? null,
+        }),
+      }],
     };
   }
 
