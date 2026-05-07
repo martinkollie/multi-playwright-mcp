@@ -237,36 +237,64 @@ async function main() {
 
 /**
  * Find other `multi-playwright-mcp/dist/index.js` processes whose parent
- * PID is dead/unknown and SIGKILL them. Runs synchronously at startup so it
+ * PID is dead/unknown and kill them. Runs synchronously at startup so it
  * never blocks tool calls. Failures are non-fatal — this is a best-effort
  * cleanup, not a correctness requirement.
+ *
+ * Cross-platform: uses `wmic` on Windows and `ps` on Unix.
  */
 function sweepOrphanedSiblings(): void {
   try {
     const { execSync } = require('node:child_process') as typeof import('node:child_process');
     const myPid = process.pid;
-    const out = execSync('ps -A -o pid=,ppid=,command=', {
-      encoding: 'utf8',
-      timeout: 2000,
-    });
+    const isWindows = process.platform === 'win32';
 
     const orphanPids: number[] = [];
-    for (const line of out.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      // Only target our own server, not arbitrary node/bun processes.
-      if (!trimmed.includes('multi-playwright-mcp/dist/index.js')) continue;
 
-      const match = trimmed.match(/^(\d+)\s+(\d+)\s+/);
-      if (!match) continue;
-      const pid = Number(match[1]);
-      const ppid = Number(match[2]);
-      if (pid === myPid) continue;
+    if (isWindows) {
+      // On Windows, use wmic to list node processes with their PIDs and parent PIDs
+      const out = execSync(
+        'wmic process where "CommandLine like \'%multi-playwright-mcp/dist/index.js%\' or CommandLine like \'%multi-playwright-mcp\\\\dist\\\\index.js%\'" get ProcessId,ParentProcessId /format:csv',
+        { encoding: 'utf8', timeout: 5000 },
+      );
 
-      // Parent dead/missing/launchd → orphan.
-      const parentAlive = isProcessAlive(ppid);
-      if (!parentAlive || ppid <= 1) {
-        orphanPids.push(pid);
+      for (const line of out.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('Node')) continue;
+        // CSV format: Node,ParentProcessId,ProcessId
+        const parts = trimmed.split(',');
+        if (parts.length < 3) continue;
+        const ppid = Number(parts[1]);
+        const pid = Number(parts[2]);
+        if (isNaN(pid) || isNaN(ppid) || pid === myPid) continue;
+
+        const parentAlive = isProcessAlive(ppid);
+        if (!parentAlive || ppid <= 1) {
+          orphanPids.push(pid);
+        }
+      }
+    } else {
+      // Unix: use ps
+      const out = execSync('ps -A -o pid=,ppid=,command=', {
+        encoding: 'utf8',
+        timeout: 2000,
+      });
+
+      for (const line of out.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        if (!trimmed.includes('multi-playwright-mcp/dist/index.js')) continue;
+
+        const match = trimmed.match(/^(\d+)\s+(\d+)\s+/);
+        if (!match) continue;
+        const pid = Number(match[1]);
+        const ppid = Number(match[2]);
+        if (pid === myPid) continue;
+
+        const parentAlive = isProcessAlive(ppid);
+        if (!parentAlive || ppid <= 1) {
+          orphanPids.push(pid);
+        }
       }
     }
 
@@ -277,8 +305,13 @@ function sweepOrphanedSiblings(): void {
     );
     for (const pid of orphanPids) {
       try {
-        // Negative PID kills the entire process group, taking Chromium with us.
-        process.kill(-pid, 'SIGKILL');
+        if (isWindows) {
+          // On Windows, SIGKILL is not supported for process groups; just kill the process.
+          process.kill(pid, 'SIGTERM');
+        } else {
+          // Negative PID kills the entire process group, taking Chromium with us.
+          process.kill(-pid, 'SIGKILL');
+        }
       } catch {
         try {
           process.kill(pid, 'SIGKILL');
