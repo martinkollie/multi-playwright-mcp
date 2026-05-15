@@ -8,6 +8,7 @@ import {
 import {
   discoverTools,
   getOrCreateClient,
+  configureSession,
   listSessions,
   closeSession,
   closeAllSessions,
@@ -49,6 +50,27 @@ const MANAGEMENT_TOOLS: Tool[] = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'create_session',
+    description:
+      'OPTIONAL. Only call this when you need to load Chrome extensions into the session. ' +
+      'For normal browsing, just call any browser_* tool with a fresh sessionId — a session ' +
+      'is auto-created on first use with default settings (isolated chromium, non-headless). ' +
+      'Extensions must be unpacked directories (not .crx). When extensions are loaded the ' +
+      'browser uses a persistent profile.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: SESSION_ID_PARAM,
+        extensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Absolute paths to unpacked Chrome extension directories to load.',
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
     name: 'close_session',
     description: 'Close a browser session and free its resources',
     inputSchema: {
@@ -87,6 +109,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     await closeSession(sessionId);
     return {
       content: [{ type: 'text', text: `Session "${sessionId}" closed` }],
+    };
+  }
+
+  if (name === 'create_session') {
+    const sessionId = (args as any)?.sessionId;
+    const extensions = (args as any)?.extensions as string[] | undefined;
+    if (!sessionId) throw new Error('sessionId is required');
+
+    if (extensions?.length) {
+      configureSession(sessionId, { extensions });
+    }
+    const client = await getOrCreateClient(sessionId);
+
+    const { tools } = await client.listTools();
+    const extInfo = extensions?.length
+      ? `with ${extensions.length} extension(s):\n${extensions.join('\n')}`
+      : 'with default settings (no extensions)';
+    return {
+      content: [{
+        type: 'text',
+        text: `Session "${sessionId}" created ${extInfo}\n\nReady (${tools.length} tools available).`,
+      }],
     };
   }
 

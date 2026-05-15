@@ -1,3 +1,13 @@
+## 2026-05-15
+
+- **`create_session` is now optional, not required.** Sessions auto-create on first `browser_*` call with default settings (isolated chromium, non-headless). `create_session` is only needed when you want to load Chrome extensions. Fixes spurious `extensions array is required` errors when agents called it reflexively with no extensions.
+- **`extensions` parameter is now optional on `create_session`.** Calling with just `sessionId` produces a default session, same as auto-create.
+- Updated tool description to make the optional nature explicit so MCP clients stop calling it by default.
+
+## 2026-04-27
+
+- **Added `create_session` tool** for launching browser sessions with Chrome extensions loaded. Accepts an array of absolute paths to unpacked extension directories. Uses `--load-extension` and `--disable-extensions-except` Chromium flags with a temporary persistent profile. Temp profile is cleaned up on `close_session`.
+
 ## 2026-04-25
 
 - **Catch orphans the watchdog misses** — when stdin is busy (e.g. attached to `/dev/zero`) or other edge cases prevent the JS event loop from servicing timers, the parent-PID watchdog from the prior fix can fail to fire, leaving an MCP node alive with `ppid=1`. Stale orphans were still observed accumulating after the 5s watchdog landed.
